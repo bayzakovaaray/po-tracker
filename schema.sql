@@ -71,16 +71,16 @@ create or replace function public.po_login(code text, name text) returns json
 language plpgsql security definer set search_path = '' as $$
 declare
   n text := left(btrim(regexp_replace(coalesce(name, ''), '\s+', ' ', 'g')), 60);
-  src text := coalesce(nullif(split_part(coalesce(current_setting('request.headers', true)::json ->> 'x-forwarded-for', ''), ',', 1), ''), 'all');
+  v_src text := btrim(coalesce(nullif(split_part(coalesce(current_setting('request.headers', true)::json ->> 'x-forwarded-for', ''), ',', 1), ''), 'all'));
   r text; ch timestamptz; tok text;
 begin
   if n = '' then return json_build_object('error', 'name'); end if;
-  if (select count(*) from po.login_fail f where f.src = btrim(src) and f.at > now() - interval '15 minutes') >= 10 then
+  if (select count(*) from po.login_fail f where f.src = v_src and f.at > now() - interval '15 minutes') >= 10 then
     return json_build_object('error', 'too_many');
   end if;
   select c.role, c.changed_at into r, ch from po.codes c where c.hash = public.crypt(coalesce(code, ''), c.hash) limit 1;
   if r is null then
-    insert into po.login_fail (src) values (btrim(src));
+    insert into po.login_fail (src) values (v_src);
     delete from po.login_fail where at < now() - interval '1 day';
     return json_build_object('error', 'code');
   end if;
